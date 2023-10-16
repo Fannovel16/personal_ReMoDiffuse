@@ -1,5 +1,6 @@
 """
 This code is borrowed from https://github.com/EricGuo5513/text-to-motion
+Modified to be compatible with matplotlib 3.8.0+
 """
 
 import torch
@@ -9,9 +10,12 @@ import math
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-from matplotlib.animation import FuncAnimation, FFMpegFileWriter
+from matplotlib.animation import FuncAnimation, PillowWriter
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import mpl_toolkits.mplot3d.axes3d as p3
+from tempfile import TemporaryDirectory
+from pathlib import Path
+from uuid import uuid4
 
 # Define a kinematic tree for the skeletal struture
 kit_kinematic_chain = [[0, 11, 12, 13, 14, 15], [0, 16, 17, 18, 19, 20], [0, 1, 2, 3, 4], [3, 5, 6, 7], [3, 8, 9, 10]]
@@ -138,8 +142,7 @@ def recover_from_ric(data, joints_num):
 
     return positions
 
-
-def plot_3d_motion(save_path, kinematic_tree, joints, title, figsize=(10, 10), fps=120, radius=4):
+def plot_3d_motion(save_path, kinematic_tree, joints, title, figsize=(10, 10), fps=120, radius=4, visualization="original", save_as_pil_lists=False):
     matplotlib.use('Agg')
 
     title_sp = title.split(' ')
@@ -152,8 +155,12 @@ def plot_3d_motion(save_path, kinematic_tree, joints, title, figsize=(10, 10), f
         ax.set_xlim3d([-radius / 4, radius / 4])
         ax.set_ylim3d([0, radius / 2])
         ax.set_zlim3d([0, radius / 2])
-        fig.suptitle(title, fontsize=20)
+        if visualization == "original":
+            fig.suptitle(title, fontsize=20)
         ax.grid(b=False)
+        fig.add_axes(ax) #As a user, you do not instantiate Axes directly, but use Axes creation methods instead; e.g. from pyplot or Figure: subplots, subplot_mosaic or Figure.add_axes.
+        if visualization == "pseudo-openpose":
+            ax.set_facecolor("black")
 
     def plot_xzPlane(minx, maxx, miny, minz, maxz):
         verts = [
@@ -173,9 +180,17 @@ def plot_3d_motion(save_path, kinematic_tree, joints, title, figsize=(10, 10), f
     init()
     MINS = data.min(axis=0).min(axis=0)
     MAXS = data.max(axis=0).max(axis=0)
-    colors = ['red', 'blue', 'black', 'red', 'blue',
-              'darkblue', 'darkblue', 'darkblue', 'darkblue', 'darkblue',
-              'darkred', 'darkred', 'darkred', 'darkred', 'darkred']
+    #Reft leg, right leg, body, left arm, right arm
+    if visualization == "pseudo-openpose":
+        colors = ['#009900', '#009999', '#000099', '#996600', '#669900',
+                'darkblue', 'darkblue', 'darkblue', 'darkblue', 'darkblue',
+                'darkred', 'darkred', 'darkred', 'darkred', 'darkred']
+    else:
+        colors = ['red', 'blue', 'black', 'red', 'blue',
+                'darkblue', 'darkblue', 'darkblue', 'darkblue', 'darkblue',
+                'darkred', 'darkred', 'darkred', 'darkred', 'darkred']
+    
+    
     frame_number = data.shape[0]
 
     height_offset = MINS[1]
@@ -186,17 +201,21 @@ def plot_3d_motion(save_path, kinematic_tree, joints, title, figsize=(10, 10), f
     data[..., 2] -= data[:, 0:1, 2]
 
     def update(index):
-        ax.lines = []
-        ax.collections = []
+        for line in ax.lines:
+            line.remove()
+        for collection in ax.collections:
+            collection.remove()
         ax.view_init(elev=120, azim=-90)
-        ax.dist = 7.5
-        plot_xzPlane(MINS[0] - trajec[index, 0], MAXS[0] - trajec[index, 0], 0, MINS[2] - trajec[index, 1],
-                     MAXS[2] - trajec[index, 1])
+        ax._dist = 7.5
+        #ax.set_box_aspect(None, zoom=7.5) #ax.dist = 7.5, https://matplotlib.org/stable/api/prev_api_changes/api_changes_3.8.0.html#axes3d
+        if visualization == "original":
+            plot_xzPlane(MINS[0] - trajec[index, 0], MAXS[0] - trajec[index, 0], 0, MINS[2] - trajec[index, 1],
+                        MAXS[2] - trajec[index, 1])
 
-        if index > 1:
-            ax.plot3D(trajec[:index, 0] - trajec[index, 0], np.zeros_like(trajec[:index, 0]),
-                      trajec[:index, 1] - trajec[index, 1], linewidth=1.0,
-                      color='blue')
+            if index > 1:
+                ax.plot3D(trajec[:index, 0] - trajec[index, 0], np.zeros_like(trajec[:index, 0]),
+                        trajec[:index, 1] - trajec[index, 1], linewidth=1.0,
+                        color='blue')
 
         for i, (chain, color) in enumerate(zip(kinematic_tree, colors)):
             if i < 5:
@@ -212,5 +231,13 @@ def plot_3d_motion(save_path, kinematic_tree, joints, title, figsize=(10, 10), f
         ax.set_zticklabels([])
 
     ani = FuncAnimation(fig, update, frames=frame_number, interval=1000 / fps, repeat=False)
-    ani.save(save_path, fps=fps)
-    plt.close()
+    
+    if save_as_pil_lists:
+        pil_writer = PillowWriter()
+        with TemporaryDirectory() as tmpdir:
+            ani.save(Path(tmpdir, f"{uuid4()}.gif"), writer=pil_writer)
+        plt.close()
+        return pil_writer._frames
+    else:
+        ani.save(save_path, fps=fps)
+        plt.close()
