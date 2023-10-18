@@ -51,7 +51,7 @@ def render(motions):
     faces = rot2xyz.smpl_model.faces
 
     print(f'Running SMPLify, it may take a few minutes.')
-    motion_tensor, opt_dict = j2s.joint2smpl(motions)  # [nframes, njoints, 3]
+    motion_tensor, opt_dict = j2s.forward(motions)  # [nframes, njoints, 3]
 
     vertices = rot2xyz(torch.tensor(motion_tensor).clone(), mask=None,
                                     pose_rep='rot6d', translation=True, glob=True,

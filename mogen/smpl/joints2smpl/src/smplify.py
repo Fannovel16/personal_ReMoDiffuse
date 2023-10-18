@@ -12,7 +12,7 @@ from customloss import (camera_fitting_loss,
                         )
 from prior import MaxMixturePrior
 from mogen.smpl.joints2smpl.src import config
-
+from tqdm import tqdm
 
 
 @torch.no_grad()
@@ -52,7 +52,7 @@ class SMPLify3D():
                  use_collision=False,
                  use_lbfgs=True,
                  joints_category="orig",
-                 device=torch.device('cuda:0'),
+                 device=torch.device('cuda:0')
                  ):
 
         # Store options
@@ -154,6 +154,7 @@ class SMPLify3D():
         preserve_pose = init_pose[:, 3:].detach().clone()
        # -------------Step 1: Optimize camera translation and body orientation--------
         # Optimize only camera translation and body orientation
+        print("Optimizing step 1/2: camera translation and body orientation...")
         body_pose.requires_grad = False
         betas.requires_grad = False
         global_orient.requires_grad = True
@@ -164,7 +165,8 @@ class SMPLify3D():
         if self.use_lbfgs:
             camera_optimizer = torch.optim.LBFGS(camera_opt_params, max_iter=self.num_iters,
                                                  lr=self.step_size, line_search_fn='strong_wolfe')
-            for i in range(10):
+            pbar = tqdm(range(10))
+            for i in pbar:
                 def closure():
                     camera_optimizer.zero_grad()
                     smpl_output = self.smpl(global_orient=global_orient,
@@ -178,13 +180,14 @@ class SMPLify3D():
                     loss = camera_fitting_loss_3d(model_joints, camera_translation,
                                                   init_cam_t, j3d, self.joints_category)
                     loss.backward()
+                    pbar.set_postfix(loss=loss.item())
                     return loss
 
                 camera_optimizer.step(closure)
         else:
             camera_optimizer = torch.optim.Adam(camera_opt_params, lr=self.step_size, betas=(0.9, 0.999))
-
-            for i in range(20):
+            pbar = tqdm(range(20))
+            for i in pbar:
                 smpl_output = self.smpl(global_orient=global_orient,
                                         body_pose=body_pose,
                                         betas=betas)
@@ -195,10 +198,12 @@ class SMPLify3D():
                 camera_optimizer.zero_grad()
                 loss.backward()
                 camera_optimizer.step()
+                pbar.set_postfix(loss=loss.item())
 
         # Fix camera translation after optimizing camera
         # --------Step 2: Optimize body joints --------------------------
         # Optimize only the body pose and global orientation of the body
+        print("Optimizing step 2/2: body joints...")
         body_pose.requires_grad = True
         global_orient.requires_grad = True
         camera_translation.requires_grad = True
@@ -214,7 +219,8 @@ class SMPLify3D():
         if self.use_lbfgs:
             body_optimizer = torch.optim.LBFGS(body_opt_params, max_iter=self.num_iters,
                                                lr=self.step_size, line_search_fn='strong_wolfe')
-            for i in range(self.num_iters):
+            pbar = tqdm(range(self.num_iters))
+            for i in pbar:
                 def closure():
                     body_optimizer.zero_grad()
                     smpl_output = self.smpl(global_orient=global_orient,
@@ -232,13 +238,14 @@ class SMPLify3D():
                                                 model_vertices=model_vertices, model_faces=self.model_faces,
                                                 search_tree=search_tree, pen_distance=pen_distance, filter_faces=filter_faces)
                     loss.backward()
+                    pbar.set_postfix(loss=loss.item())
                     return loss
 
                 body_optimizer.step(closure)
         else:
             body_optimizer = torch.optim.Adam(body_opt_params, lr=self.step_size, betas=(0.9, 0.999))
-
-            for i in range(self.num_iters):
+            pbar = tqdm(range(self.num_iters))
+            for i in pbar:
                 smpl_output = self.smpl(global_orient=global_orient,
                                         body_pose=body_pose,
                                         betas=betas)

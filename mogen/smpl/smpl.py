@@ -20,7 +20,7 @@ action2motion_joints = [8, 1, 2, 3, 4, 5, 6, 7, 0, 9, 10, 11, 12, 13, 14, 21, 24
 import os
 from pathlib import Path
 
-SMPL_DATA_PATH = Path(__file__).parent.parent.parent / "smpl_ckpts"
+SMPL_DATA_PATH = Path(__file__).parent / "body_models" / "smpl"
 
 SMPL_KINTREE_PATH = os.path.join(SMPL_DATA_PATH, "kintree_table.pkl")
 SMPL_MODEL_PATH = os.path.join(SMPL_DATA_PATH, "SMPL_NEUTRAL.pkl")

@@ -12,14 +12,15 @@ import argparse
 
 class joints2smpl:
 
-    def __init__(self, num_frames, device):
+    def __init__(self, num_frames, device, num_smplify_iters=150, smplify_step_size=1e-2, fix_foot=False):
         self.device = device
         # self.device = torch.device("cpu")
         self.batch_size = num_frames
         self.num_joints = 22  # for HumanML3D
         self.joint_category = "AMASS"
-        self.num_smplify_iters = 150
-        self.fix_foot = False
+        self.num_smplify_iters = num_smplify_iters
+        self.smplify_step_size = smplify_step_size
+        self.fix_foot = fix_foot
         print(config.SMPL_MODEL_DIR)
         smplmodel = smplx.create(config.SMPL_MODEL_DIR,
                                  model_type="smpl", gender="neutral", ext="pkl",
@@ -39,7 +40,8 @@ class joints2smpl:
                             batch_size=self.batch_size,
                             joints_category=self.joint_category,
                             num_iters=self.num_smplify_iters,
-                            device=self.device)
+                            device=self.device,
+                            step_size=self.smplify_step_size)
 
 
     def npy2smpl(self, npy_path):
@@ -72,7 +74,7 @@ class joints2smpl:
 
 
         # joints3d = input_joints[idx]  # *1.2 #scale problem [check first]
-        keypoints_3d = torch.Tensor(input_joints).to(self.device).float()
+        keypoints_3d = torch.from_numpy(input_joints).to(self.device).float()
 
         # if idx == 0:
         if init_params is None:
@@ -94,6 +96,7 @@ class joints2smpl:
                 confidence_input[11] = 1.5
         else:
             print("Such category not settle down!")
+        self.confidence_input = confidence_input
 
         new_opt_vertices, new_opt_joints, new_opt_pose, new_opt_betas, \
         new_opt_cam_t, new_opt_joint_loss = _smplify(
