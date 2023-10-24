@@ -12,7 +12,7 @@ import argparse
 
 class joints2smpl:
 
-    def __init__(self, num_frames, device, num_smplify_iters=150, smplify_step_size=1e-2, fix_foot=False):
+    def __init__(self, num_frames, device, num_smplify_iters=150, smplify_step_size=1e-2, fix_foot=False, smpl_model_path=config.SMPL_MODEL_DIR):
         self.device = device
         # self.device = torch.device("cpu")
         self.batch_size = num_frames
@@ -21,8 +21,7 @@ class joints2smpl:
         self.num_smplify_iters = num_smplify_iters
         self.smplify_step_size = smplify_step_size
         self.fix_foot = fix_foot
-        print(config.SMPL_MODEL_DIR)
-        smplmodel = smplx.create(config.SMPL_MODEL_DIR,
+        smplmodel = smplx.create(smpl_model_path,
                                  model_type="smpl", gender="neutral", ext="pkl",
                                  batch_size=self.batch_size).to(self.device)
 
@@ -110,7 +109,7 @@ class joints2smpl:
 
         thetas = new_opt_pose.reshape(self.batch_size, 24, 3)
         thetas = geometry.matrix_to_rotation_6d(geometry.axis_angle_to_matrix(thetas))  # [bs, 24, 6]
-        root_loc = torch.tensor(keypoints_3d[:, 0])  # [bs, 3]
+        root_loc = keypoints_3d[:, 0].clone().detach()  # [bs, 3]
         root_loc = torch.cat([root_loc, torch.zeros_like(root_loc)], dim=-1).unsqueeze(1)  # [bs, 1, 6]
         thetas = torch.cat([thetas, root_loc], dim=1).unsqueeze(0).permute(0, 2, 3, 1)  # [1, 25, 6, 196]
 
